@@ -9,18 +9,15 @@
 #![warn(rust_2018_idioms)]
 
 use tokio::net::UdpSocket;
-use tokio::{io, time};
 use tokio::fs::File;
-// use tokio_stream::StreamExt;
 use tokio_util::codec::BytesCodec;
 use tokio_util::udp::UdpFramed;
 use tokio_util::io::ReaderStream;
 
 use bytes::Bytes;
-use futures::{future, FutureExt, SinkExt, Stream, StreamExt, TryStreamExt};
+use futures::{SinkExt, StreamExt};
 use std::env;
 use std::error::Error;
-use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 #[tokio::main]
@@ -59,43 +56,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             (total, start)
         });
 
-    let (a, b) = dbg!(tokio::join!(a, b));
-    Ok(())
-}
-
-async fn recv(socket: &mut UdpFramed<BytesCodec>) -> Result<(), io::Error> {
-    let mut total_bytes = 0;
-    let start = std::time::Instant::now();
-    while let Ok(Some(Ok((bytes, addr)))) = time::timeout(Duration::from_millis(200), socket.next()).await {
-        total_bytes += bytes.len();
-    }
-    let elapsed = start.elapsed();
-    dbg!(total_bytes, elapsed.as_secs_f64(), total_bytes as f64 / elapsed.as_secs_f64() / 1024.0 / 1024.0);
-    Ok(())
-}
-
-async fn ping(socket: &mut UdpFramed<BytesCodec>, b_addr: SocketAddr) -> Result<(), io::Error> {
-    socket.send((Bytes::from(&b"PING"[..]), b_addr)).await?;
-
-    for _ in 0..4usize {
-        let (bytes, addr) = socket.next().map(|e| e.unwrap()).await?;
-
-        println!("[a] recv: {}", String::from_utf8_lossy(&bytes));
-
-        socket.send((Bytes::from(&b"PING"[..]), addr)).await?;
-    }
-
-    Ok(())
-}
-
-async fn pong(socket: &mut UdpFramed<BytesCodec>) -> Result<(), io::Error> {
-    let timeout = Duration::from_millis(200);
-
-    while let Ok(Some(Ok((bytes, addr)))) = time::timeout(timeout, socket.next()).await {
-        println!("[b] recv: {}", String::from_utf8_lossy(&bytes));
-
-        socket.send((Bytes::from(&b"PONG"[..]), addr)).await?;
-    }
-
+    let (_a, _b) = dbg!(tokio::join!(a, b));
     Ok(())
 }
