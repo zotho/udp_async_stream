@@ -8,6 +8,8 @@
 
 #![warn(rust_2018_idioms)]
 
+use std::future::Future;
+use std::process::Output;
 use tokio::net::{ToSocketAddrs, UdpSocket};
 use tokio::fs::File;
 use tokio::net::unix::SocketAddr;
@@ -28,7 +30,7 @@ use std::time::{Duration, Instant};
 // use timeout_stream::TimeoutStream;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn old_main() -> Result<(), Box<dyn Error>> {
     let a_addr = env::args()
         .nth(1)
         .unwrap_or_else(|| "127.0.0.1:8000".to_string());
@@ -131,17 +133,71 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn udp_stream_sink<A: ToSocketAddrs>(
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let a_addr = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "127.0.0.1:8000".to_string());
+    
+    let b_addr = env::args()
+        .nth(2)
+        .unwrap_or_else(|| "127.0.0.1:8001".to_string());
+    
+    let file = File::open("images/image.png").await?;
+    let total = file.metadata().await?.len();
+    
+    let start = Instant::now();
+    let a = udp_sink(a_addr, b_addr.parse().unwrap());
+    let b = udp_stream(b_addr);
+
+    let (a, b) = tokio::join!(a, b);
+    dbg!((a, b));
+    let elapsed = dbg!(start.elapsed().as_secs_f64());
+    let mb_per_sec = total as f64 / (elapsed - 1.0) / 1024.0 / 1024.0;
+    dbg!(mb_per_sec);
+    Ok(())
+}
+
+async fn udp_sink<A: ToSocketAddrs>(
     from_addr: A,
-    to_addr: A,
-) -> Result<(impl futures::Sink<(Bytes, std::net::SocketAddr)>, impl std::future::Future, impl futures::TryStream), Box<dyn Error>> {
+    to_addr: std::net::SocketAddr,
+) -> Result<(), Box<dyn Error>> {
     let from = UdpSocket::bind(from_addr).await?;
-    let to = UdpSocket::bind(to_addr).await?;
-    let to_addr = to.local_addr()?;
+    let from = dbg!(from);
     let mut a = UdpFramed::new(from, BytesCodec::new());
     let file = File::open("images/image.png").await?;
     let mut reader_stream = ReaderStream::with_capacity(file, 1024 * 9)
-        .map(move |b| b.map(|b| (b, to_addr)));
-    let a_2 = a.send_all(&mut reader_stream);
-    Ok((a, a_2, reader_stream))
+        .inspect(|r| {
+            if let Ok(b) = r {
+                // dbg!(b.len());
+            }
+        })
+        .map(|b| b.map(|b| (b, to_addr)))
+        .inspect(|r| {
+            if let Ok(b) = r {
+                // dbg!(b.1);
+            }
+        })
+        ;
+    let res = a.send_all(&mut reader_stream).await?;
+    Ok(res)
+}
+
+async fn udp_stream<A: ToSocketAddrs>(
+    to_addr: A,
+) -> Result<(), Box<dyn Error>> {
+    let from = UdpSocket::bind(to_addr).await?;
+    let from = dbg!(from);
+    let b = UdpFramed::new(from, BytesCodec::new())
+        .inspect(|r| {
+            if let Ok(b) = r {
+                dbg!(b.0.len());
+            }
+        })
+        .map(|e| e.unwrap().0);
+    let b = tokio_stream::StreamExt::timeout(b, Duration::from_secs_f64(1.0));
+    let b = b
+        .try_fold((), |_, _| async move {Ok(())});
+    let res = b.await?;
+    Ok(res)
 }
