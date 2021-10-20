@@ -16,153 +16,44 @@ use tokio_util::udp::UdpFramed;
 use tokio_util::io::ReaderStream;
 
 use futures::{SinkExt, StreamExt, TryStreamExt};
-// use futures::future::FusedFuture;
 use std::env;
 use std::error::Error;
 use std::time::{Duration, Instant};
 
-// mod timeout_stream;
-// mod timeout;
-// use timeout_stream::TimeoutStream;
-
-// #[tokio::main]
-// async fn old_main() -> Result<(), Box<dyn Error>> {
-//     let a_addr = env::args()
-//         .nth(1)
-//         .unwrap_or_else(|| "127.0.0.1:8000".to_string());
-    
-//     let b_addr = env::args()
-//         .nth(2)
-//         .unwrap_or_else(|| "127.0.0.1:8001".to_string());
-
-//     // Bind both our sockets and then figure out what ports we got.
-//     let a = UdpSocket::bind(&a_addr).await?;
-//     // let a_2 = UdpSocket::bind(&addr).await?;
-//     let b = UdpSocket::bind(&b_addr).await?;
-
-//     let b_addr = b.local_addr()?;
-
-//     let mut a = UdpFramed::new(a, BytesCodec::new());
-//     // let mut a_2 = UdpFramed::new(a_2, BytesCodec::new());
-//     let b = UdpFramed::new(b, BytesCodec::new());
-
-//     let file = File::open("images/image.png").await?;
-//     // let file_2 = file.try_clone().await?;
-//     // let file_2 = File::open("images/image.png").await?;
-//     let total = file.metadata().await?.len();
-//     let mut reader_stream = ReaderStream::with_capacity(file, 1024 * 9)
-//         .map(|b| b.map(|b| (b, b_addr)))
-//         // .scan(0, |acc, x| {
-//         //     *acc += x.as_ref().map(|(b, _)| b.len()).unwrap_or(0);
-//         //     println!("first: {}", *acc as f64 / 1024.0 / 1024.0);
-//         //     future::ready(Some(x))
-//         // })
-//         ;
-
-//     // let mut reader_stream_2 = ReaderStream::with_capacity(file_2, 1024 * 9)
-//         // .map(|b| b.map(|b| (b, b_addr)))
-//         // .scan(0, |acc, x| {
-//         //     *acc += x.as_ref().map(|(b, _)| b.len()).unwrap_or(0);
-//         //     println!("second: {}", *acc as f64 / 1024.0 / 1024.0);
-//         //     future::ready(Some(x))
-//         // })
-//         // ;
-
-//     // let mut a = a.fanout(a_2);
-//     let mut a = a.send_all(&mut reader_stream);
-//     // let mut a_2 = a_2.send_all(&mut reader_stream_2);
-
-//     let b = b
-//         // .scan(0, |acc, x| {
-//         //     *acc += x.as_ref().map(|(b, _)| b.len()).unwrap_or(0);
-//         //     println!("total: {}", *acc as f64 / 1024.0 / 1024.0);
-//         //     future::ready(Some(x))
-//         // })
-//         .map(|e| e.unwrap().0);
-
-//         // .fold((0, Instant::now()), |(acc, start), e| async move {
-//         //     let total = acc + e.len();
-//         //     let mb_per_sec = total as f64 / start.elapsed().as_secs_f64() / 1024.0 / 1024.0;
-//         //     dbg!(mb_per_sec);
-//         //     (total, start)
-//         // });
-
-//     let b = tokio_stream::StreamExt::timeout(b, Duration::from_secs_f64(1.0));
-//     // let b = b
-//     //     .try_fold(0, |acc, start| async move {
-//     //         let total = acc + start.len();
-//     //         dbg!(total / 1024 / 1024);
-//     //         Ok(total)
-//     //     });
-//     let b = b
-//         .try_fold((), |_, _| async move {Ok(())});
-
-//     let start = Instant::now();
-//     // let (a, a_2, b) = tokio::join!(a, a_2, b);
-//     let (mut is_a, mut is_a_2) = (false, false);
-//     tokio::pin!(b);
-//     loop {
-//         tokio::select! {
-//             a = &mut a, if !is_a => {
-//                 dbg!(a.unwrap());
-//                 is_a = true;
-//             },
-//             // a_2 = &mut a_2, if !is_a_2 => {
-//             //     dbg!(a_2.unwrap());
-//             //     is_a_2 = true;
-//             // },
-//             b = &mut b, if !b.is_terminated() => {
-//                 dbg!(b).expect_err("Should elapse");
-//             },
-//             else => {
-//                 break;
-//             }
-//         }
-//     }
-
-//     let mb_per_sec = total as f64 / (start.elapsed().as_secs_f64() - 1.0) / 1024.0 / 1024.0;
-//     dbg!(mb_per_sec);
-
-//     // a.unwrap();
-//     // a_2.unwrap();
-//     // b.expect_err("Should be Elapsed");
-//     Ok(())
-// }
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt::init();
     let command = env::args()
         .nth(1)
         .unwrap_or_else(|| "both".to_string());
 
-    let a_addr = env::args()
+    let from_addr = env::args()
         .nth(2)
         .unwrap_or_else(|| "127.0.0.1:8000".to_string());
     
-    let b_addr = env::args()
+    let to_addr = env::args()
         .nth(3)
         .unwrap_or_else(|| "127.0.0.1:8001".to_string());
-    
-    
+
     match command.as_str() {
-        "both" => both(a_addr, b_addr).await,
-        "sink" => sink(a_addr, b_addr).await,
-        "stream" => stream(b_addr).await,
+        "both" => both(from_addr, to_addr).await,
+        "sink" => sink(from_addr, to_addr).await,
+        "stream" => stream(to_addr).await,
         _ => panic!("wrong command")
     }
 }
 
-async fn both(a_addr: String, b_addr: String) -> Result<(), Box<dyn Error>> {
+async fn both(from_addr: String, to_addr: String) -> Result<(), Box<dyn Error>> {
     let file = File::open("images/image.png").await?;
     let total = file.metadata().await?.len();
     let start = Instant::now();
 
-    let a = udp_sink(a_addr, b_addr.parse()?);
-    let b = udp_stream(b_addr);
+    let a = udp_sink(from_addr, to_addr.parse()?);
+    let b = udp_stream(to_addr);
     let (a, b) = tokio::join!(a, b);
     
-    let elapsed = dbg!(start.elapsed().as_secs_f64());
-    let mb_per_sec = total as f64 / (elapsed - 1.0) / 1024.0 / 1024.0;
+    let elapsed = start.elapsed().as_secs_f64();
+    let mb_per_sec = total as f64 / (elapsed - 5.0) / 1024.0 / 1024.0;
     dbg!(mb_per_sec);
     if a.is_err() {
         a
@@ -174,27 +65,27 @@ async fn both(a_addr: String, b_addr: String) -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn sink(a_addr: String, b_addr: String) -> Result<(), Box<dyn Error>> {
+async fn sink(from_addr: String, to_addr: String) -> Result<(), Box<dyn Error>> {
     let file = File::open("images/image.png").await?;
     let total = file.metadata().await?.len();
     let start = Instant::now();
 
-    let a = udp_sink(a_addr, b_addr.parse()?).await;
-    
-    let elapsed = dbg!(start.elapsed().as_secs_f64());
+    let a = udp_sink(from_addr, to_addr.parse()?).await;
+
+    let elapsed = start.elapsed().as_secs_f64();
     let mb_per_sec = total as f64 / elapsed / 1024.0 / 1024.0;
     dbg!(mb_per_sec);
     a
 }
 
-async fn stream(b_addr: String) -> Result<(), Box<dyn Error>> {
+async fn stream(to_addr: String) -> Result<(), Box<dyn Error>> {
     let file = File::open("images/image.png").await?;
     let total = file.metadata().await?.len();
     let start = Instant::now();
 
-    let b = udp_stream(b_addr).await;
+    let b = dbg!(udp_stream(to_addr).await);
     
-    let elapsed = dbg!(start.elapsed().as_secs_f64());
+    let elapsed = start.elapsed().as_secs_f64();
     let mb_per_sec = total as f64 / (elapsed - 5.0) / 1024.0 / 1024.0;
     dbg!(mb_per_sec);
     match b {
@@ -203,7 +94,7 @@ async fn stream(b_addr: String) -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn udp_sink<A: ToSocketAddrs>(
+async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug>(
     from_addr: A,
     to_addr: std::net::SocketAddr,
 ) -> Result<(), Box<dyn Error>> {
