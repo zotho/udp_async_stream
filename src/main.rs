@@ -8,17 +8,17 @@
 
 #![warn(rust_2018_idioms)]
 
+use std::env;
+use std::error::Error;
+use std::time::{Duration, Instant};
+
 use tokio::net::{ToSocketAddrs, UdpSocket};
 use tokio::fs::File;
 use tokio_stream;
 use tokio_util::codec::BytesCodec;
 use tokio_util::udp::UdpFramed;
 use tokio_util::io::ReaderStream;
-
-use futures::{SinkExt, StreamExt, TryStreamExt};
-use std::env;
-use std::error::Error;
-use std::time::{Duration, Instant};
+use futures::{future, SinkExt, StreamExt, TryStreamExt};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -29,11 +29,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let from_addr = env::args()
         .nth(2)
-        .unwrap_or_else(|| "127.0.0.1:8000".to_string());
+        .unwrap_or_else(|| "0.0.0.0:8000".to_string());
     
     let to_addr = env::args()
         .nth(3)
-        .unwrap_or_else(|| "127.0.0.1:8001".to_string());
+        .unwrap_or_else(|| "0.0.0.0:8001".to_string());
 
     match command.as_str() {
         "both" => both(from_addr, to_addr).await,
@@ -48,12 +48,13 @@ async fn both(from_addr: String, to_addr: String) -> Result<(), Box<dyn Error>> 
     let total = file.metadata().await?.len();
     let start = Instant::now();
 
+    let timeout = Duration::from_secs_f64(5.0);
     let a = udp_sink(from_addr, to_addr.parse()?);
-    let b = udp_stream(to_addr);
+    let b = udp_stream(to_addr, timeout);
     let (a, b) = tokio::join!(a, b);
-    
+
     let elapsed = start.elapsed().as_secs_f64();
-    let mb_per_sec = total as f64 / (elapsed - 5.0) / 1024.0 / 1024.0;
+    let mb_per_sec = total as f64 / (elapsed - timeout.as_secs_f64()) / 1024.0 / 1024.0;
     dbg!(mb_per_sec);
     if a.is_err() {
         a
@@ -83,10 +84,11 @@ async fn stream(to_addr: String) -> Result<(), Box<dyn Error>> {
     let total = file.metadata().await?.len();
     let start = Instant::now();
 
-    let b = dbg!(udp_stream(to_addr).await);
-    
+    let timeout = Duration::from_secs_f64(5.0);
+    let b = dbg!(udp_stream(to_addr, timeout).await);
+
     let elapsed = start.elapsed().as_secs_f64();
-    let mb_per_sec = total as f64 / (elapsed - 5.0) / 1024.0 / 1024.0;
+    let mb_per_sec = total as f64 / (elapsed - timeout.as_secs_f64()) / 1024.0 / 1024.0;
     dbg!(mb_per_sec);
     match b {
         Ok(_) => unreachable!("Should time out"),
@@ -100,29 +102,34 @@ async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug>(
 ) -> Result<(), Box<dyn Error>> {
     let mut socket = UdpFramed::new(UdpSocket::bind(from_addr).await?, BytesCodec::new());
     let mut reader_stream = ReaderStream::with_capacity(File::open("images/image.png").await?, 1024 * 9)
-        .map(|r| r.map(|b| (b, to_addr)))
-        .inspect(|r| {
-            if let Ok(_b) = r {
-                dbg!(_b.1);
-            }
+        .scan(Instant::now(), |last_time, bytes| {
+            let time = Instant::now();
+            let len = match &bytes {
+                Ok(b) => b.len(),
+                _ => 0,
+            };
+            let elapsed = len as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
+            println!("{:.0}", elapsed);
+            *last_time = time;
+            future::ready(Some(bytes))
         })
-        ;
+        .map(|r| r.map(|b| (b, to_addr)));
     Ok(socket.send_all(&mut reader_stream).await?)
 }
 
 async fn udp_stream<A: ToSocketAddrs>(
     to_addr: A,
+    timeout: Duration,
 ) -> Result<(), Box<dyn Error>> {
-    let timeout = Duration::from_secs_f64(5.0);
     let socket = UdpFramed::new(UdpSocket::bind(to_addr).await?, BytesCodec::new())
-        .inspect(|r| {
-            if let Ok(_b) = r {
-                dbg!(_b.0.len());
-            }
-        })
-        .map(|e| e.unwrap().0);
+        .map(|e| e.unwrap().0)
+        .scan(Instant::now(), |last_time, bytes| {
+            let time = Instant::now();
+            let elapsed = bytes.len() as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
+            println!("\t{:.0}", elapsed);
+            *last_time = time;
+            future::ready(Some(bytes))
+        });
     let socket = tokio_stream::StreamExt::timeout(socket, timeout);
-    let socket = socket
-        .try_fold((), |_, _| async move {Ok(())});
-    Ok(socket.await?)
+    Ok(socket.try_fold((), |_, _| async move {Ok(())}).await?)
 }
