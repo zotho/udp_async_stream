@@ -102,15 +102,16 @@ async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug>(
 ) -> Result<(), Box<dyn Error>> {
     let mut socket = UdpFramed::new(UdpSocket::bind(from_addr).await?, BytesCodec::new());
     let mut reader_stream = ReaderStream::with_capacity(File::open("images/image.png").await?, 1024 * 9)
-        .scan(Instant::now(), |last_time, bytes| {
+        .scan((0, Instant::now()), |(acc, last_time), bytes| {
             let time = Instant::now();
             let len = match &bytes {
                 Ok(b) => b.len(),
                 _ => 0,
             };
             let elapsed = len as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
-            println!("{:.0}", elapsed);
             *last_time = time;
+            *acc += len;
+            println!("{:.0}\t{}", elapsed, *acc);
             future::ready(Some(bytes))
         })
         .map(|r| r.map(|b| (b, to_addr)));
@@ -123,11 +124,12 @@ async fn udp_stream<A: ToSocketAddrs>(
 ) -> Result<(), Box<dyn Error>> {
     let socket = UdpFramed::new(UdpSocket::bind(to_addr).await?, BytesCodec::new())
         .map(|e| e.unwrap().0)
-        .scan(Instant::now(), |last_time, bytes| {
+        .scan((0, Instant::now()), |(acc, last_time), bytes| {
             let time = Instant::now();
             let elapsed = bytes.len() as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
-            println!("\t{:.0}", elapsed);
             *last_time = time;
+            *acc += bytes.len();
+            println!("\t\t{:.0}\t{}", elapsed, *acc);
             future::ready(Some(bytes))
         });
     let socket = tokio_stream::StreamExt::timeout(socket, timeout);
