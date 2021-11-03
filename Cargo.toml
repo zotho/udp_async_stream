@@ -3,6 +3,10 @@ name = "udp_stream"
 version = "0.1.0"
 edition = "2018"
 
+# For flamegraph
+[profile.release]
+debug = true
+
 [dependencies]
 tokio = { version = "1.0.0", features = ["full", "tracing"] }
 tokio-util = { version = "0.6.8", features = ["full"] }
