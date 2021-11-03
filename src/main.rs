@@ -8,6 +8,7 @@
 
 #![warn(rust_2018_idioms)]
 
+use std::convert::TryInto;
 use std::env;
 use std::error::Error;
 use std::time::{Duration, Instant};
@@ -75,15 +76,21 @@ async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug + Clone>(
         )
             // .inspect(|r| {dbg!(r.as_deref().map(|b| b.len()));})
             .chunks(4)
-            .scan((0, Instant::now()), |(acc, last_time), bytes| {
-                let bytes: BytesMut = bytes.into_iter().map(Result::unwrap).flatten().collect();
+            .enumerate()
+            .scan((0, Instant::now()), |(acc, last_time), (i, bytes)| {
+                let mut bytes: BytesMut = bytes.into_iter().map(Result::unwrap).flatten().collect();
+
+                let mut b = [0; 16];
+                let n = i.to_le_bytes();
+                b[..n.len()].copy_from_slice(&n);
+                bytes.extend_from_slice(&b);
 
                 let time = Instant::now();
                 let len = bytes.len();
-                let speed = len as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
+                // let speed = len as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
                 *last_time = time;
                 *acc += len;
-                println!("{:.0}\t{}\t{}", speed, *acc, len);
+                println!("{}\t{}\t{}", i, *acc, len);
                 future::ready(Some(bytes.freeze()))
             })
             .map(|b| Ok((b, to_addr)));
@@ -108,13 +115,17 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
             BytesCodec::new()
         )
             .map(|e| e.unwrap().0)
-            .scan((0, Instant::now()), |(_, last_time), bytes| {
-                let time = Instant::now();
+            .scan((0, Instant::now()), |(_, last_time), mut bytes| {
                 let len = bytes.len();
-                let speed = len as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
+
+                let b = bytes.split_off(len - 16);
+                let a = usize::from_le_bytes(b[..std::mem::size_of::<usize>()].try_into().unwrap());
+
+                let time = Instant::now();
+                // let speed = len as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
                 *last_time = time;
                 acc += len;
-                println!("{:.0}\t{}\t{}", speed, acc, len);
+                println!("\t{}\t{}\t{}", a, acc, len);
                 future::ready(Some(bytes))
             });
         let socket = tokio_stream::StreamExt::timeout(socket, timeout);
