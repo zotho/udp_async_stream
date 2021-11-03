@@ -112,7 +112,7 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
         let socket = tokio_stream::StreamExt::timeout(socket, timeout);
         match socket.try_fold((), |_, _| async move {Ok(())}).await {
             Ok(o) => return Ok(o),
-            Err(e) => println!("{}", e),
+            Err(_) => continue,
         }
     }
 }
