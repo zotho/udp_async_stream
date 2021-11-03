@@ -15,11 +15,10 @@ use std::time::{Duration, Instant};
 use bytes::BytesMut;
 use tokio::net::{ToSocketAddrs, UdpSocket};
 use tokio::fs::File;
-use tokio_stream;
 use tokio_util::codec::BytesCodec;
 use tokio_util::udp::UdpFramed;
 use tokio_util::io::ReaderStream;
-use futures::{SinkExt, StreamExt, TryStreamExt, future};
+use futures::{SinkExt, StreamExt, future};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -103,7 +102,7 @@ async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug + Clone>(
 ) -> Result<(), Box<dyn Error>> {
     loop {
         let mut socket = UdpFramed::new(UdpSocket::bind(from_addr.clone()).await?, BytesCodec::new());
-        let reader_stream = ReaderStream::with_capacity(
+        let mut reader_stream = ReaderStream::with_capacity(
             File::open("images/image.png").await?,
             1024 * 50
         )
@@ -121,19 +120,19 @@ async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug + Clone>(
                 future::ready(Some(bytes.freeze()))
             })
             .map(|b| Ok((b, to_addr)));
-        tokio::pin!(reader_stream);
-        let reader_stream = tokio_stream::StreamExt::throttle(
-            reader_stream,
-            Duration::from_secs_f64(0.05)
-        );
-        tokio::pin!(reader_stream);
+        // tokio::pin!(reader_stream);
+        // let reader_stream = tokio_stream::StreamExt::throttle(
+        //     reader_stream,
+        //     Duration::from_secs_f64(0.05)
+        // );
+        // tokio::pin!(reader_stream);
         socket.send_all(&mut reader_stream).await?;
     }
 }
 
 async fn udp_stream<A: ToSocketAddrs + Clone>(
     to_addr: A,
-    timeout: Duration,
+    _timeout: Duration,
 ) -> Result<(), Box<dyn Error>> {
     loop {
         let socket = UdpFramed::new(
@@ -150,12 +149,12 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
                 println!("\t\t{:.0}\t{}\t{}", speed, *acc, len);
                 future::ready(Some(bytes))
             });
-        let socket = tokio_stream::StreamExt::timeout(socket, timeout);
+        // let socket = tokio_stream::StreamExt::timeout(socket, timeout);
         // match socket.try_fold((), |_, _| async move {Ok(())}).await {
         //     Ok(o) => return Ok(o),
         //     Err(e) => println!("{}", e),
         // }
-        let socket = socket.inspect_err(|e| {dbg!(e);});
+        // let socket = socket.inspect_err(|e| {dbg!(e);});
         dbg!(socket.fold((), |_, _| async {()}).await);
     }
 }
