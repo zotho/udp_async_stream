@@ -90,7 +90,7 @@ async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug + Clone>(
                 // let speed = len as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
                 *last_time = time;
                 *acc += len;
-                println!("{}\t{}\t{}", i, *acc, len);
+                println!("{}", i);
                 future::ready(Some(bytes.freeze()))
             })
             .map(|b| Ok((b, to_addr)));
@@ -109,6 +109,7 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
     timeout: Duration,
 ) -> Result<(), Box<dyn Error>> {
     let mut acc = 0;
+    let mut last_i = 0;
     loop {
         let socket = UdpFramed::new(
             UdpSocket::bind(to_addr.clone()).await?,
@@ -119,13 +120,15 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
                 let len = bytes.len();
 
                 let b = bytes.split_off(len - 16);
-                let a = usize::from_le_bytes(b[..std::mem::size_of::<usize>()].try_into().unwrap());
+                let i = usize::from_le_bytes(b[..std::mem::size_of::<usize>()].try_into().unwrap());
+                let diff = i - last_i;
+                last_i = i;
 
                 let time = Instant::now();
                 // let speed = len as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
                 *last_time = time;
                 acc += len;
-                println!("\t{}\t{}\t{}", a, acc, len);
+                println!("\t{}\t{}", i, if diff != 1 {diff.to_string()} else {"".to_string()});
                 future::ready(Some(bytes))
             });
         let socket = tokio_stream::StreamExt::timeout(socket, timeout);
