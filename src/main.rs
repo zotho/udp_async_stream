@@ -68,8 +68,8 @@ async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug + Clone>(
     to_addr: std::net::SocketAddr,
     throttle: Duration,
 ) -> Result<(), Box<dyn Error>> {
+    let mut socket = UdpFramed::new(UdpSocket::bind(from_addr.clone()).await?, BytesCodec::new());
     loop {
-        let mut socket = UdpFramed::new(UdpSocket::bind(from_addr.clone()).await?, BytesCodec::new());
         let reader_stream = ReaderStream::with_capacity(
             File::open("images/image.png").await?,
             1024 * 50
