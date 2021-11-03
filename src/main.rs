@@ -85,7 +85,7 @@ async fn stream(to_addr: String) -> Result<(), Box<dyn Error>> {
     let total = file.metadata().await?.len();
     let start = Instant::now();
 
-    let timeout = Duration::from_secs_f64(0.01);
+    let timeout = Duration::from_secs_f64(0.06);
     let b = dbg!(udp_stream(to_addr, timeout).await);
 
     let elapsed = start.elapsed().as_secs_f64();
