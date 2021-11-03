@@ -93,19 +93,20 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
     to_addr: A,
     timeout: Duration,
 ) -> Result<(), Box<dyn Error>> {
+    let mut acc = 0;
     loop {
         let socket = UdpFramed::new(
             UdpSocket::bind(to_addr.clone()).await?,
             BytesCodec::new()
         )
             .map(|e| e.unwrap().0)
-            .scan((0, Instant::now()), |(acc, last_time), bytes| {
+            .scan((0, Instant::now()), |(_, last_time), bytes| {
                 let time = Instant::now();
                 let len = bytes.len();
                 let speed = len as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
                 *last_time = time;
-                *acc += len;
-                println!("\t\t{:.0}\t{}\t{}", speed, *acc, len);
+                acc += len;
+                println!("{:.0}\t{}\t{}", speed, acc, len);
                 future::ready(Some(bytes))
             });
         let socket = tokio_stream::StreamExt::timeout(socket, timeout);
