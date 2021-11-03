@@ -36,8 +36,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .nth(3)
         .unwrap_or_else(|| "0.0.0.0:8001".to_string());
 
-    let throttle = Duration::from_secs_f64(0.05);
-    let timeout = Duration::from_secs_f64(0.01);
+    let throttle = env::args()
+        .nth(4)
+        .unwrap_or_else(|| "0.05".to_string());
+
+    let timeout = env::args()
+        .nth(5)
+        .unwrap_or_else(|| "0.01".to_string());
+
+    let throttle = Duration::from_secs_f64(throttle.parse().unwrap());
+    let timeout = Duration::from_secs_f64(timeout.parse().unwrap());
     
     match command.as_str() {
         "both" => both(from_addr, to_addr, throttle, timeout).await,
