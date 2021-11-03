@@ -68,7 +68,9 @@ async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug + Clone>(
     to_addr: std::net::SocketAddr,
     throttle: Duration,
 ) -> Result<(), Box<dyn Error>> {
-    let mut socket = UdpFramed::new(UdpSocket::bind(from_addr.clone()).await?, BytesCodec::new());
+    let socket = UdpSocket::bind(from_addr.clone()).await?;
+    socket.set_broadcast(true)?;
+    let mut socket = UdpFramed::new(socket, BytesCodec::new());
     loop {
         let reader_stream = ReaderStream::with_capacity(
             File::open("images/image.png").await?,
@@ -94,7 +96,6 @@ async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug + Clone>(
                 future::ready(Some(bytes.freeze()))
             })
             .map(|b| Ok((b, to_addr)));
-        tokio::pin!(reader_stream);
         let reader_stream = tokio_stream::StreamExt::throttle(
             reader_stream,
             throttle
@@ -109,6 +110,7 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
     timeout: Duration,
 ) -> Result<(), Box<dyn Error>> {
     let socket = UdpSocket::bind(to_addr.clone()).await?;
+    socket.set_broadcast(true)?;
     let mut acc = 0;
     let mut last_i = 0;
     loop {
