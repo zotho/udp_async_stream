@@ -108,11 +108,12 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
     to_addr: A,
     timeout: Duration,
 ) -> Result<(), Box<dyn Error>> {
+    let socket = UdpSocket::bind(to_addr.clone()).await?;
     let mut acc = 0;
     let mut last_i = 0;
     loop {
-        let socket = UdpFramed::new(
-            UdpSocket::bind(to_addr.clone()).await?,
+        let stream = UdpFramed::new(
+            &socket,
             BytesCodec::new()
         )
             .map(|e| e.unwrap().0)
@@ -131,8 +132,8 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
                 println!("{}\t{}", i, if diff != 1 {diff.to_string()} else {"".to_string()});
                 future::ready(Some(bytes))
             });
-        let socket = tokio_stream::StreamExt::timeout(socket, timeout);
-        match socket.try_fold((), |_, _| async move {Ok(())}).await {
+        let stream = tokio_stream::StreamExt::timeout(stream, timeout);
+        match stream.try_fold((), |_, _| async move {Ok(())}).await {
             Ok(o) => return Ok(o),
             Err(e) => println!("{}", e),
         }
