@@ -1,2 +1,7 @@
 /target
 *.png
+*.log
+
+*.data
+*.data.old
+*.svg

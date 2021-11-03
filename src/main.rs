@@ -19,7 +19,7 @@ use tokio_stream;
 use tokio_util::codec::BytesCodec;
 use tokio_util::udp::UdpFramed;
 use tokio_util::io::ReaderStream;
-use futures::{future, SinkExt, StreamExt, TryStreamExt};
+use futures::{future, SinkExt, StreamExt};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -124,7 +124,7 @@ async fn udp_sink<A: ToSocketAddrs + std::fmt::Debug + Clone>(
         tokio::pin!(reader_stream);
         let reader_stream = tokio_stream::StreamExt::throttle(
             reader_stream,
-            Duration::from_secs_f64(0.02)
+            Duration::from_secs_f64(0.05)
         );
         tokio::pin!(reader_stream);
         socket.send_all(&mut reader_stream).await?;
@@ -151,9 +151,10 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
                 future::ready(Some(bytes))
             });
         let socket = tokio_stream::StreamExt::timeout(socket, timeout);
-        match socket.try_fold((), |_, _| async move {Ok(())}).await {
-            Ok(o) => return Ok(o),
-            Err(e) => println!("{}", e),
-        }
+        // match socket.try_fold((), |_, _| async move {Ok(())}).await {
+        //     Ok(o) => return Ok(o),
+        //     Err(e) => println!("{}", e),
+        // }
+        dbg!(socket.fold((), |_, _| async {()}).await);
     }
 }
