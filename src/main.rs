@@ -19,7 +19,7 @@ use tokio_stream;
 use tokio_util::codec::BytesCodec;
 use tokio_util::udp::UdpFramed;
 use tokio_util::io::ReaderStream;
-use futures::{future, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, TryStreamExt, future};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -155,6 +155,7 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
         //     Ok(o) => return Ok(o),
         //     Err(e) => println!("{}", e),
         // }
+        let socket = socket.inspect_err(|e| {dbg!(e);});
         dbg!(socket.fold((), |_, _| async {()}).await);
     }
 }
