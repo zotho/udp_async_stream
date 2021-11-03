@@ -128,13 +128,13 @@ async fn udp_stream<A: ToSocketAddrs + Clone>(
                 // let speed = len as f64 / 1024.0 / 1024.0 / time.duration_since(*last_time).as_secs_f64();
                 *last_time = time;
                 acc += len;
-                println!("\t{}\t{}", i, if diff != 1 {diff.to_string()} else {"".to_string()});
+                println!("{}\t{}", i, if diff != 1 {diff.to_string()} else {"".to_string()});
                 future::ready(Some(bytes))
             });
         let socket = tokio_stream::StreamExt::timeout(socket, timeout);
         match socket.try_fold((), |_, _| async move {Ok(())}).await {
             Ok(o) => return Ok(o),
-            Err(_) => continue,
+            Err(e) => println!("{}", e),
         }
     }
 }
